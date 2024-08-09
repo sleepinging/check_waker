@@ -8,6 +8,7 @@
 #include <format>
 #include <functional>
 #include <atomic>
+#include <filesystem>
 
 #include "suspend_resume_notifier.h"
 #include "log.h"
@@ -27,8 +28,22 @@ extern "C"
 
 #define ID_TIMEOUT 32000
 
-Checker checker(std::chrono::minutes(10));
+Checker checker(std::chrono::seconds(30));
 std::atomic_uint32_t g_session_id = 0;
+
+bool doScriptAndSleep() noexcept {
+    // 调用用户自定义脚本
+    constexpr auto kScriptName = L"before_sleep.bat";
+    if (std::filesystem::exists(kScriptName)) {
+        if (auto c = system("before_sleep.bat"); c != 0) {
+            LOGF_WARN("script exit {} != 0, cancel", c);
+            return false;
+        }
+    }
+    // 让系统进入睡眠状态
+    LOGF_INFO("Sleep now");
+    return system("psshutdown64.exe -d -t 0") == 0;
+}
 
 bool confirmAndSleep() noexcept {
     // 5分钟没有点击确认就自动睡眠
@@ -36,7 +51,11 @@ bool confirmAndSleep() noexcept {
     auto str = std::format(L"检测到没有操作，将会在{:%Y-%m-%d %H:%M:%OS}重新睡眠, 关闭此窗口取消睡眠", fixZone(sleep_time));
     auto r = MessageBoxTimeout(NULL, str.c_str(), L"提示", MB_OK, 0, 5 * 60 * 1000);
     if (r == ID_TIMEOUT) {
-        LOGF_INFO("Timeout, sleep now");
+        LOGF_INFO("Timeout, try sleep");
+        if (!doScriptAndSleep()) {
+            LOGF_ERROR("Failed to sleep");
+            return false;
+        }
         return true;
     }
     return false;
@@ -55,6 +74,7 @@ bool checkLoop(std::chrono::steady_clock::time_point resume_time, uint32_t sessi
 
         if (user_input) {
             LOGF_INFO("User input detected, exit check loop");
+            break;
         }
 
         if (session_id != g_session_id.load()) {
@@ -62,25 +82,26 @@ bool checkLoop(std::chrono::steady_clock::time_point resume_time, uint32_t sessi
             break;
         }
 
-        // TODO: 检测到没有操作， 询问用户没反应之后重新睡眠
-        if (!timeout) {
-            Sleep(1000);
-            continue;
+        if (timeout) {
+            LOGF_INFO("Timeout, sleep now");
+            confirmAndSleep();
+            break;
         }
 
+        Sleep(1000);
 
-        break;
     }
     return true;
 }
 
 int main()
 {
+    // 微软的运行时库没有自动调用 tzset，会导致时区获取错误，所以这里手动调用一下
     _tzset();
-    confirmAndSleep();
+    volatile uint32_t resume_count = 0;
 
     SuspendResumeNotifier notifier;
-    notifier.setHandler([](SuspendResumeNotifier::Status status) {
+    notifier.setHandler([&](SuspendResumeNotifier::Status status) {
         switch (status) {
         case SuspendResumeNotifier::Status::kSuspending:
             LOGF_INFO("Suspending");
@@ -88,18 +109,38 @@ int main()
             break;
         case SuspendResumeNotifier::Status::kResuming:
             LOGF_INFO("Resuming");
+            ++resume_count;
             ++g_session_id;
             break;
         default:
             break;
         }
         });
+
+    uint32_t last_resume_count = 0;
     if (auto hr = notifier.initialize(); FAILED(hr)) {
         LOGF_ERROR("Failed to initialize notifier: {:X}", hr);
         return 1;
     }
 
-    checkLoop(std::chrono::steady_clock::now(), g_session_id.load());
+    LOGF_INFO("Check waker started");
+
+    //等待被唤醒
+    while (true) {
+        //DBGF_INFO("Waiting for resume");
+        if (last_resume_count == resume_count) {
+            Sleep(1000);
+            continue;
+        }
+
+        LOGF_INFO("Resume count: {}", (uint32_t)resume_count);
+        last_resume_count = resume_count;
+
+        auto resume_time = std::chrono::system_clock::now();
+        checkLoop(std::chrono::steady_clock::now(), g_session_id.load());
+        LOGF_INFO("recheck");
+    }
+
 
     notifier.uninitialize();
     return 0;
