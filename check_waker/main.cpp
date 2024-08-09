@@ -33,7 +33,7 @@ extern "C"
 
 #define ID_TIMEOUT 32000
 
-Checker checker(std::chrono::seconds(30));
+Checker checker(std::chrono::minutes(5));
 std::atomic_uint32_t g_session_id = 0;
 
 bool doScriptAndSleep() noexcept {
