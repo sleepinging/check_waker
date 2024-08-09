@@ -15,6 +15,11 @@
 #include "checker.h"
 #include "tools.h"
 
+#ifndef _DEBUG
+#pragma comment( linker, "/subsystem:windows /entry:mainCRTStartup" )
+#endif // !_DEBUG
+
+
 extern "C"
 {
     int WINAPI MessageBoxTimeoutA(IN HWND hWnd, IN LPCSTR lpText, IN LPCSTR lpCaption, IN UINT uType, IN WORD wLanguageId, IN DWORD dwMilliseconds);
