@@ -36,28 +36,37 @@ extern "C"
 Checker checker(std::chrono::minutes(5));
 std::atomic_uint32_t g_session_id = 0;
 
-bool doScriptAndSleep() noexcept {
+bool execScriptAndSleep() noexcept {
     // 调用用户自定义脚本
     constexpr auto kScriptName = L"before_sleep.bat";
-    if (std::filesystem::exists(kScriptName)) {
-        if (auto c = system("before_sleep.bat"); c != 0) {
+    const static auto kCurrentPath = getCurrentPath();
+    const static auto kScriptPath = kCurrentPath / kScriptName;
+    if (std::filesystem::exists(kScriptPath)) {
+        if (auto c = system(kScriptPath.string().c_str()); c != 0) {
             LOGF_WARN("script exit {} != 0, cancel", c);
             return false;
         }
     }
     // 让系统进入睡眠状态
     LOGF_INFO("Sleep now");
-    return system("psshutdown64.exe -d -t 0") == 0;
+    const static auto kPsShutdownPath = kCurrentPath / L"psshutdown64.exe";
+    if (!std::filesystem::exists(kPsShutdownPath)) {
+        LOGF_ERROR("psshutdown64.exe not found");
+        return false;
+    }
+
+    const static auto kPsShutdownCmd = std::format("{} -d -t 0", kPsShutdownPath.string());
+    return system(kPsShutdownCmd.c_str()) == 0;
 }
 
 bool confirmAndSleep() noexcept {
     // 5分钟没有点击确认就自动睡眠
     auto sleep_time = std::chrono::system_clock::now() + std::chrono::minutes(5);
     auto str = std::format(L"检测到没有操作，将会在{:%Y-%m-%d %H:%M:%OS}重新睡眠, 关闭此窗口取消睡眠", fixZone(sleep_time));
-    auto r = MessageBoxTimeout(NULL, str.c_str(), L"提示", MB_OK, 0, 5 * 60 * 1000);
+    auto r = MessageBoxTimeout(NULL, str.c_str(), L"提示", MB_OK, 0, 3 * 60 * 1000);
     if (r == ID_TIMEOUT) {
         LOGF_INFO("Timeout, try sleep");
-        if (!doScriptAndSleep()) {
+        if (!execScriptAndSleep()) {
             LOGF_ERROR("Failed to sleep");
             return false;
         }

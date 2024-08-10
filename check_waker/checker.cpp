@@ -24,7 +24,7 @@ namespace {
             .cbSize = sizeof(LASTINPUTINFO)
         };
         if (!GetLastInputInfo(&lastInputInfo)) {
-            std::cerr << "GetLastInputInfo failed " << GetLastError();
+            LOGF_ERROR("GetLastInputInfo failed {}", GetLastError());
             return false;
         }
         //DBGF_INFO("Last input time: {}", tickTimeToString(lastInputInfo.dwTime));

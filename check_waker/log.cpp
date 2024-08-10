@@ -1,10 +1,12 @@
 #include "log.h"
 
+#include "tools.h"
+
 #include <chrono>
 
 void simple_log(LogLevel level, std::string_view line) noexcept {
     auto now = std::chrono::system_clock::now();
-    auto time_str = std::format("{:%Y-%m-%d %H:%M:%S}", now);
+    auto time_str = std::format("{:%Y-%m-%d %H:%M:%S}", fixZone(now));
 
     const static char* level_str[] = {
         "DEBUG",

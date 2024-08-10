@@ -1,10 +1,22 @@
-#include "tools.h"
+ï»¿#include "tools.h"
+
+#include <Windows.h>
 
 std::chrono::system_clock::time_point fixZone(std::chrono::system_clock::time_point tp) noexcept
 {
-    // ÐÞÕýÊ±Çø
+    // ä¿®æ­£æ—¶åŒº
     long tz{};
     _get_timezone(&tz);
     auto zoned_time = tp - std::chrono::seconds(tz);
     return zoned_time;
+}
+
+std::filesystem::path getCurrentPath() noexcept
+{
+    wchar_t path_str[MAX_PATH]{ 0 };
+    if (GetModuleFileNameW(NULL, path_str, MAX_PATH) == 0) {
+        return {};
+    }
+    std::filesystem::path path(path_str);
+    return path.parent_path();
 }
