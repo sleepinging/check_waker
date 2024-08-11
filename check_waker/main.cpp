@@ -62,8 +62,9 @@ bool execScriptAndSleep() noexcept {
 bool confirmAndSleep() noexcept {
     // 5分钟没有点击确认就自动睡眠
     auto sleep_time = std::chrono::system_clock::now() + std::chrono::minutes(5);
-    auto str = std::format(L"检测到没有操作，将会在{:%Y-%m-%d %H:%M:%OS}重新睡眠, 关闭此窗口取消睡眠", fixZone(sleep_time));
-    auto r = MessageBoxTimeout(NULL, str.c_str(), L"提示", MB_OK, 0, 3 * 60 * 1000);
+    auto str = std::format(L"检测到没有操作，将会在{:%Y-%m-%d %H:%M:%OS}重新睡眠, 点击任意按钮或者关闭此窗口取消睡眠", fixZone(sleep_time));
+    auto r = MessageBoxTimeout(NULL, str.c_str(), L"提示", MB_OKCANCEL, 0, 3 * 60 * 1000);
+    LOGF_INFO("MessageBoxTimeout {}", r);
     if (r == ID_TIMEOUT) {
         LOGF_INFO("Timeout, try sleep");
         if (!execScriptAndSleep()) {
